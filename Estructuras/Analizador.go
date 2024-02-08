@@ -2,10 +2,15 @@ package Estructuras
 
 import (
 	"bufio"
+	"bytes"
+	"encoding/binary"
 	"fmt"
+	"io/ioutil"
 	"log"
+	"math/rand"
 	"os"
 	"strings"
+	"time"
 )
 
 func Analyze(command string) {
@@ -67,43 +72,72 @@ func Analyze_Mkdisk(list_tokens []string) {
 	//variables del mkdisk
 
 	//tamano de 5 mb
-	size_int := 5 * 1024 * 1024
+	size_int := 5 * 1024
 
-	//crear el archivo binario
-	_, err := os.Stat("Hard_disk.sdk")
-
-	if os.IsNotExist(err) {
-		file, err := os.Create("Hard_disk.sdk")
-
+	//Si no existe el directorio Discos, entonces crearlo
+	if _, err := os.Stat("Discos"); os.IsNotExist(err) {
+		err = os.Mkdir("Discos", 0664)
 		if err != nil {
-			fmt.Println("error al crear el archivo")
-		}
-
-		data := make([]byte, size_int)
-
-		//llenamos el archivo en bytes
-		WriteInBytes(file, data)
-
-		file.Close()
-		NewMBR(int64(size_int))
-
-	} else {
-		// El archivo ya existe, así que lo abrimos para su reemplazo
-		file, err := os.Create("Hard_disk.sdk")
-		if err != nil {
-			fmt.Println("Error al reemplazar el archivo:", err)
+			fmt.Println("Error al crear el directorio Discos: ", err)
 			return
 		}
-
-		defer file.Close()
-
-		data := make([]byte, size_int)
-
-		// Llenamos el archivo con bytes
-		WriteInBytes(file, data)
-
-		NewMBR(int64(size_int))
 	}
+	//Contar la cantidad de discos para asignar el nombre
+	archivos, err := ioutil.ReadDir("Discos")
+	if err != nil {
+		fmt.Println("Error al leer el directorio: ", err)
+		return
+	}
+
+	letter := "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+	//crear nombre del disco a partir de la cantidad de discos que hay en la carpeta
+	nameDisk := string(letter[len(archivos)])
+
+	//crear el archivo binario
+	file, err := os.Create("Discos/" + "Hard_Disk" + nameDisk + ".dsk")
+
+	if err != nil {
+		fmt.Println("error al crear el disco", err)
+		return
+	}
+	defer file.Close()
+
+	//en este apartado emepzamos en la creacion del MBR en el disk
+
+	randomNum := rand.Intn(99) + 1
+	var disk MBR
+
+	dateNow := time.Now()
+	date := dateNow.Format("2006-01-02 15:04:05")
+	disk.MBR_SIZE = int64(size_int)
+	disk.MBR_ID = (int64(randomNum))
+	copy(disk.MBR_DATE[:], date)
+
+	//llenamos el archivo en bytes
+	bufer := new(bytes.Buffer)
+	for i := 0; i < 1024; i++ {
+		bufer.WriteByte(0)
+	}
+
+	var totalBytes int = 0
+	for totalBytes < int(size_int) {
+		c, err := file.Write(bufer.Bytes())
+		if err != nil {
+			fmt.Println("Error al escribir en el archivo: ", err)
+			return
+		}
+		totalBytes += c
+	}
+	fmt.Println("Archivo llenado con 0s")
+	//Escribir el MBR en el disco
+	file.Seek(0, 0)
+	err = binary.Write(file, binary.LittleEndian, &disk)
+	if err != nil {
+		fmt.Println("Error al escribir el MBR en el disco: ", err)
+		return
+	}
+	fmt.Println("Disco", nameDisk, "creado con exito")
 
 }
 
@@ -143,7 +177,23 @@ func Analyze_execute(list_tokens []string) {
 }
 
 func Analyze_rep(list_tokens []string) {
-	fmt.Println(list_tokens)
+	//Abrir el disco A
+	archivo, err := os.Open("Discos/Hard_DiskA.dsk")
+	if err != nil {
+		fmt.Println("Error al abrir el disco: ", err)
+		return
+	}
+	defer archivo.Close()
+	disk := NewMBR()
+	archivo.Seek(int64(0), 0)
+	err = binary.Read(archivo, binary.LittleEndian, &disk)
+	if err != nil {
+		fmt.Println("Error al leer el MBR del disco: ", err)
+		return
+	}
+	fmt.Println("Tamaño: ", disk.MBR_SIZE)
+	fmt.Println("Fecha: ", string(disk.MBR_DATE[:]))
+	fmt.Println("Signature: ", disk.MBR_ID)
 
 }
 
